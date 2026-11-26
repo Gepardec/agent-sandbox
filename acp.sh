@@ -3,12 +3,43 @@
 # A symbolic link to the script is sufficient.
 # The sandbox name is "<agent>-<name of the current working directory>", with '_' and ' ' replaced by '-'.
 
-# Install into a project (run by hand in a terminal, not by the IDE):
-#   acp.sh install [claude|junie] [project-dir]      (project-dir defaults to $PWD)
+# Install/update this script from GitHub into ~/.local/bin (run by hand, not by the IDE):
+#   curl -fsSL https://raw.githubusercontent.com/Gepardec/agent-sandbox/main/acp.sh | bash -s self-install
+#   acp.sh self-install                       (update, once installed)
+# Always downloads (when piped there is no file to copy). Overrides (environment):
+#   ACP_INSTALL_DIR  target directory (default: ~/.local/bin)
+#   ACP_REF          branch, tag or commit to fetch (default: main)
+if [ "${1:-}" = "self-install" ]; then
+    set -eu
+    DEST_DIR="${ACP_INSTALL_DIR:-$HOME/.local/bin}"
+    URL="https://raw.githubusercontent.com/Gepardec/agent-sandbox/${ACP_REF:-main}/acp.sh"
+    mkdir -p "${DEST_DIR}"
+    TMP="$(mktemp "${DEST_DIR}/.acp.sh.XXXXXX")"
+    trap 'rm -f "${TMP}"' EXIT
+    echo "Downloading ${URL}"
+    curl -fsSL "${URL}" -o "${TMP}" < /dev/null
+    # Sanity check before replacing a working install: a bash script that parses.
+    head -n 1 "${TMP}" | grep -q '^#!/bin/bash' || { echo "Download is not acp.sh, aborting" >&2; exit 1; }
+    bash -n "${TMP}" || { echo "Downloaded acp.sh has syntax errors, aborting" >&2; exit 1; }
+    chmod 755 "${TMP}"
+    mv -f "${TMP}" "${DEST_DIR}/acp.sh"
+    trap - EXIT
+    echo "Installed ${DEST_DIR}/acp.sh"
+    case ":${PATH}:" in
+        *":${DEST_DIR}:"*) ;;
+        *) echo "Note: ${DEST_DIR} is not on your PATH, use the full path or add it to PATH." ;;
+    esac
+    echo
+    echo "Next: cd /path/to/your/project && ${DEST_DIR}/acp.sh init claude"
+    exit 0
+fi
+
+# Set up a project (run by hand in a terminal, not by the IDE):
+#   acp.sh init [claude|junie] [project-dir]      (project-dir defaults to $PWD)
 # Links this script into the project as ./acp.sh, ignores ./acp/ in ./.gitignore (created
 # if missing, even without a git repo) and prints
 # the acp.json entry to add. An existing real file ./acp.sh is never overwritten.
-if [ "${1:-}" = "install" ]; then
+if [ "${1:-}" = "init" ]; then
     # Resolve symbolic links portably (readlink -f is missing on older macOS).
     REAL="$0"
     while [ -L "${REAL}" ]; do
