@@ -20,7 +20,11 @@ log() {
 }
 
 SANDBOX="${1}-$(basename "$PWD" | tr '_ ' '-')"
-
+# Optional second arg "no-central-login": install central, but do not log in.
+CENTRAL_LOGIN=1
+if [ "${2:-}" = "no-central-login" ]; then
+    CENTRAL_LOGIN=0
+fi
 # Meta information: arguments and working directory
 log INFO "---- acp.sh start ----"
 log INFO "script: $0"
@@ -204,6 +208,10 @@ ensure_central() {
 
     # Login and agent setup run inside the sandbox; the login script generated
     # above does the same interactively from a terminal.
+    if [ "${CENTRAL_LOGIN}" -eq 0 ]; then
+        log INFO "no-central-login given: central is installed, skipping login, add and status check"
+        return 0
+    fi
     sbx_run "central login && central add ${AGENT}" \
         || log WARN "central login/add failed in ${SANDBOX}"
 
