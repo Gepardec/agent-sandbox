@@ -70,9 +70,17 @@ ensure_sandbox() {
 CLAUDE_DEFAULT_MODEL="claude-sonnet-5-5"
 CLAUDE_DEFAULT_EFFORT="medium"
 
+# Kit (mixin) that installs the OpenSpec CLI, see kits/openspec/spec.yaml.
+# Default: unpinned git reference (follows the default branch of this repo).
+# If OPENSPEC_KIT_LOCAL is set, it is taken as the path of a local kit directory
+# (containing spec.yaml) instead, e.g. OPENSPEC_KIT_LOCAL=~/bin/kits/openspec.
+OPENSPEC_KIT_GIT="git+https://github.com/Gepardec/agent-sandbox.git#dir=kits/openspec"
+OPENSPEC_KIT="${OPENSPEC_KIT_LOCAL:-${OPENSPEC_KIT_GIT}}"
+log INFO "openspec kit: ${OPENSPEC_KIT}"
+
 # Claude Code: run claude-agent-acp in the sandbox (ACP over stdio).
 run_claude() {
-    ensure_sandbox sbx/claude:latest --kit sbx/claude-acp:latest
+    ensure_sandbox sbx/claude:latest --kit sbx/claude-acp:latest --kit "${OPENSPEC_KIT}"
     ensure_central
     add_intellij_mcp
     log INFO "connecting: sbx exec -i ${SANDBOX} claude-agent-acp (model ${CLAUDE_DEFAULT_MODEL}, effort ${CLAUDE_DEFAULT_EFFORT})"
@@ -84,7 +92,7 @@ run_claude() {
 
 # Junie: run junie in ACP mode in the sandbox (ACP over stdio).
 run_junie() {
-    ensure_sandbox sbx/junie:latest
+    ensure_sandbox sbx/junie:latest --kit "${OPENSPEC_KIT}"
     ensure_central
     add_intellij_mcp
     log INFO "connecting: sbx exec -i ${SANDBOX} junie --acp=true"

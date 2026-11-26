@@ -1,0 +1,19 @@
+# syntax=docker/sandbox-kit:3
+# The OpenSpec CLI (@fission-ai/openspec) as an overlay mixin.
+#
+# Replaces the v2 spec.yaml: sbx refuses to mix v3 kits (claude, claude-acp)
+# with v1/v2 kits in one sandbox, so this kit is v3 as well.
+schemaVersion: "3"
+displayName: OpenSpec
+description: Installs the OpenSpec CLI so sandbox agents can run `openspec`.
+sourceUrl: https://github.com/Fission-AI/OpenSpec
+
+kind: mixin
+
+# Pinned in openspec.dockerfile (OPENSPEC_VERSION); the build fails if the
+# installed version differs. Bump both together.
+provides: ["openspec@2.2.0"]
+
+# No capabilities: the npm download happens at build time, so the sandbox needs
+# no install-phase network access. Running `openspec` itself needs no egress.
+# Note: OpenSpec needs node >= 22.20 in the composed base (the claude base ships node).
