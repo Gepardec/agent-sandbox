@@ -1,0 +1,30 @@
+# syntax=docker/sandbox-kit:3
+# JetBrains Central CLI (Air gateway) as an overlay mixin.
+#
+# Installs the `central` binary only. `central login` and `central add <agent>`
+# are interactive/per-user and stay in acp.sh.
+schemaVersion: "3"
+displayName: JetBrains Central CLI
+description: Installs the JetBrains Central CLI and allows the hosts it needs.
+sourceUrl: https://central-cli.labs.jb.gg
+
+kind: mixin
+
+# Pinned in central.dockerfile (CENTRAL_VERSION + per-arch SHA256); the build
+# fails if `central --version` differs. Bump all of them together.
+provides: ["central@2.9.0"]
+
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      # Download happens at build time, so no install phase is needed.
+      # Hosts reached by `central login/add/status` and by the gateway at runtime.
+      runtime:
+        allow:
+          - api.jetbrains.cloud
+          - api.jetbrains.ai
+          - oauth.account.jetbrains.com
+          - central-cli.labs.jb.gg
+          - ingrazzio-cloud-prod.labs.jb.gg
+          - resources.jetbrains.com
+          - jetbrains-central-cli.s3.eu-west-1.amazonaws.com

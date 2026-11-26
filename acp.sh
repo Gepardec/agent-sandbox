@@ -70,17 +70,26 @@ ensure_sandbox() {
 CLAUDE_DEFAULT_MODEL="claude-sonnet-5-5"
 CLAUDE_DEFAULT_EFFORT="medium"
 
-# Kit (mixin) that installs the OpenSpec CLI, see kits/openspec/spec.yaml.
-# Default: unpinned git reference (follows the default branch of this repo).
-# If OPENSPEC_KIT_LOCAL is set, it is taken as the path of a local kit directory
-# (containing spec.yaml) instead, e.g. OPENSPEC_KIT_LOCAL=~/bin/kits/openspec.
-OPENSPEC_KIT_GIT="git+https://github.com/Gepardec/agent-sandbox.git#dir=kits/openspec"
-OPENSPEC_KIT="${OPENSPEC_KIT_LOCAL:-${OPENSPEC_KIT_GIT}}"
+# Kits (mixins), see kits/<name>/<name>.yaml:
+#   openspec - installs the OpenSpec CLI
+#   central  - installs the central CLI and allows its network hosts
+# Default: unpinned git references (follow the default branch of this repo).
+# If KIT_LOCAL is set, it is taken as the directory that contains the kit
+# directories (<KIT_LOCAL>/openspec, <KIT_LOCAL>/central), e.g. KIT_LOCAL=~/bin/kits.
+KIT_GIT_BASE="git+https://github.com/Gepardec/agent-sandbox.git#dir=kits"
+if [ -n "${KIT_LOCAL:-}" ]; then
+    OPENSPEC_KIT="${KIT_LOCAL%/}/openspec"
+    CENTRAL_KIT="${KIT_LOCAL%/}/central"
+else
+    OPENSPEC_KIT="${KIT_GIT_BASE}/openspec"
+    CENTRAL_KIT="${KIT_GIT_BASE}/central"
+fi
 log INFO "openspec kit: ${OPENSPEC_KIT}"
+log INFO "central kit: ${CENTRAL_KIT}"
 
 # Claude Code: run claude-agent-acp in the sandbox (ACP over stdio).
 run_claude() {
-    ensure_sandbox sbx/claude:latest --kit sbx/claude-acp:latest --kit "${OPENSPEC_KIT}"
+    ensure_sandbox sbx/claude:latest --kit sbx/claude-acp:latest --kit "${OPENSPEC_KIT}" --kit "${CENTRAL_KIT}"
     ensure_central
     add_intellij_mcp
     log INFO "connecting: sbx exec -i ${SANDBOX} claude-agent-acp (model ${CLAUDE_DEFAULT_MODEL}, effort ${CLAUDE_DEFAULT_EFFORT})"
@@ -92,23 +101,12 @@ run_claude() {
 
 # Junie: run junie in ACP mode in the sandbox (ACP over stdio).
 run_junie() {
-    ensure_sandbox sbx/junie:latest --kit "${OPENSPEC_KIT}"
+    ensure_sandbox sbx/junie:latest --kit "${OPENSPEC_KIT}" --kit "${CENTRAL_KIT}"
     ensure_central
     add_intellij_mcp
     log INFO "connecting: sbx exec -i ${SANDBOX} junie --acp=true"
     exec sbx exec -i "${SANDBOX}" junie --acp=true
 }
-
-# Hosts the JetBrains Central CLI (Air gateway) needs to reach from the sandbox.
-CENTRAL_HOSTS=(
-    api.jetbrains.cloud
-    api.jetbrains.ai
-    jetbrains-central-cli.s3.eu-west-1.amazonaws.com
-    oauth.account.jetbrains.com
-    central-cli.labs.jb.gg
-    ingrazzio-cloud-prod.labs.jb.gg
-    resources.jetbrains.com
-)
 
 # Run a non-interactive command inside the sandbox. stdin is detached and stdout
 # goes to the log, so nothing interferes with the ACP stream of the IDE.
@@ -180,30 +178,18 @@ strip_ansi() {
     sed -E $'s/\x1b\\[[0-9;?]*[ -\\/]*[@-~]//g; s/\x1b\\][^\x07\x1b]*(\x07|\x1b\\\\)//g; s/\x1b[@-Z\\\\-_]//g; s/\r//g'
 }
 
-# Make sure the network policies are set and central is installed in the sandbox.
+# Make sure central (installed by the central kit) is configured in the sandbox.
 # Login is interactive and cannot happen here -> a login script with hard coded
 # values is generated (see write_central_login).
 ensure_central() {
     write_central_login
+    # central itself is installed (and its network hosts allowed) by the central kit.
+    # A sandbox created before the kit existed has neither -> recreate it.
     if sbx_run "command -v central"; then
-        log INFO "central already installed in ${SANDBOX}"
-    else
-        log INFO "central not installed in ${SANDBOX}, allowing network policies"
-        local host
-        for host in "${CENTRAL_HOSTS[@]}"; do
-            if sbx policy allow network --sandbox "${SANDBOX}" "${host}" < /dev/null >> "${LOGFILE}" 2>&1; then
-                log INFO "policy allowed: ${host}"
-            else
-                log WARN "could not allow policy for ${host} (maybe it already exists)"
-            fi
-        done
-
-        log INFO "installing central in ${SANDBOX}"
-        if ! sbx_run "curl -fsSL https://central-cli.labs.jb.gg/install.sh | bash && central --version"; then
-            log ERROR "failed to install central in ${SANDBOX}"
-            exit 1
-        fi
         log INFO "central installed in ${SANDBOX}"
+    else
+        log ERROR "central not found in ${SANDBOX}: it is provided by the central kit; remove the sandbox (sbx rm ${SANDBOX}) so it is recreated with the kit"
+        exit 1
     fi
 
     # Set analytics consent explicitly, otherwise `central login` asks for it
