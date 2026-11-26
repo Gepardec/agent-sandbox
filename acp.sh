@@ -3,6 +3,44 @@
 # A symbolic link to the script is sufficient.
 # The sandbox name is "<agent>-<name of the current working directory>", with '_' and ' ' replaced by '-'.
 
+# Install into a project (run by hand in a terminal, not by the IDE):
+#   acp.sh install [claude|junie] [project-dir]      (project-dir defaults to $PWD)
+# Links this script into the project as ./acp.sh, ignores ./acp/ in ./.gitignore (created
+# if missing, even without a git repo) and prints
+# the acp.json entry to add. An existing real file ./acp.sh is never overwritten.
+if [ "${1:-}" = "install" ]; then
+    # Resolve symbolic links portably (readlink -f is missing on older macOS).
+    REAL="$0"
+    while [ -L "${REAL}" ]; do
+        LINK_TARGET="$(readlink "${REAL}")"
+        case "${LINK_TARGET}" in
+            /*) REAL="${LINK_TARGET}" ;;
+            *) REAL="$(dirname "${REAL}")/${LINK_TARGET}" ;;
+        esac
+    done
+    REAL="$(cd "$(dirname "${REAL}")" && pwd)/$(basename "${REAL}")"
+    AGENT_NAME="${2:-claude}"
+    case "${AGENT_NAME}" in claude | junie) ;; *) echo "unsupported agent '${AGENT_NAME}' (claude, junie)" >&2; exit 1 ;; esac
+    PROJECT="$(cd "${3:-$PWD}" && pwd)" || exit 1
+    if [ -e "${PROJECT}/acp.sh" ] && [ ! -L "${PROJECT}/acp.sh" ]; then
+        echo "${PROJECT}/acp.sh is a regular file, not touching it" >&2
+        exit 1
+    fi
+    if [ "${PROJECT}/acp.sh" != "${REAL}" ]; then
+        ln -sfn "${REAL}" "${PROJECT}/acp.sh" || exit 1
+    fi
+    echo "linked ${PROJECT}/acp.sh -> ${REAL}"
+    if ! grep -qxE '/?acp/?' "${PROJECT}/.gitignore" 2> /dev/null; then
+        printf '/acp/\n' >> "${PROJECT}/.gitignore"
+        echo "added /acp/ to ${PROJECT}/.gitignore (created if missing)"
+    fi
+    NAME="$(basename "${PROJECT}" | tr '_' ' ')"
+    echo
+    echo "Add this to the IDE's acp.json (the entry name decides the sandbox name):"
+    printf '\n"%s": {\n  "command": "%s/acp.sh",\n  "args": ["%s"]\n}\n' "${NAME}" "${PROJECT}" "${AGENT_NAME}"
+    exit 0
+fi
+
 # Script directory = directory of $0 (without the script name). When called via a
 # symbolic link, $0 is the link path, so everything ends up next to the link.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
