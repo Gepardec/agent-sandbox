@@ -87,9 +87,24 @@ fi
 log INFO "openspec kit: ${OPENSPEC_KIT}"
 log INFO "central kit: ${CENTRAL_KIT}"
 
+# Keep Claude's session transcripts and memory (~/.claude/projects) outside the
+# sandbox: ./acp/claude-projects is part of the mounted workspace, so it survives
+# `sbx rm`. ~/.claude/projects in the sandbox becomes a symlink to it. An existing
+# directory is copied over first. Only projects/ is moved; auth and kit config stay.
+persist_claude_state() {
+    local target="${ACP_DIR}/claude-projects"
+    mkdir -p "${target}"
+    if sbx_run "if [ -L ~/.claude/projects ]; then ln -sfn '${target}' ~/.claude/projects; elif [ -d ~/.claude/projects ]; then cp -a ~/.claude/projects/. '${target}'/ && rm -rf ~/.claude/projects && ln -s '${target}' ~/.claude/projects; else mkdir -p ~/.claude && ln -s '${target}' ~/.claude/projects; fi"; then
+        log INFO "claude state persisted: ~/.claude/projects -> ${target}"
+    else
+        log WARN "could not link ~/.claude/projects to ${target}; sessions are lost on sandbox removal"
+    fi
+}
+
 # Claude Code: run claude-agent-acp in the sandbox (ACP over stdio).
 run_claude() {
     ensure_sandbox sbx/claude:latest --kit sbx/claude-acp:latest --kit "${OPENSPEC_KIT}" --kit "${CENTRAL_KIT}"
+    persist_claude_state
     ensure_central
     add_intellij_mcp
     log INFO "connecting: sbx exec -i ${SANDBOX} claude-agent-acp (model ${CLAUDE_DEFAULT_MODEL}, effort ${CLAUDE_DEFAULT_EFFORT})"
