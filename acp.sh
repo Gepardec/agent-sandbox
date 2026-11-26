@@ -102,7 +102,7 @@ CENTRAL_HOSTS=(
 # goes to the log, so nothing interferes with the ACP stream of the IDE.
 # central installs to ~/.local/bin, which is not always on PATH for sbx exec.
 sbx_run() {
-    sbx exec "${SANDBOX}" bash -lc "export PATH=\"\$HOME/.local/bin:\$PATH\"; $*" < /dev/null >> "${LOGFILE}" 2>&1
+    sbx exec -t "${SANDBOX}" bash -lc "export PATH=\"\$HOME/.local/bin:\$PATH\"; $*" < /dev/null >> "${LOGFILE}" 2>&1
 }
 
 # IntelliJ MCP server (built-in IDE server), added to sbx after `central add`.
@@ -152,7 +152,8 @@ log_login_banner() {
 ##                                                                            ##
 ##   LOGIN REQUIRED: central is not logged in in sandbox ${SANDBOX}
 ##                                                                            ##
-##   The agent will not work until you log in. Run in a terminal:             ##
+##   The agent will not work until you log in. Trigger the login by running   ##
+##   this script in a terminal:                                               ##
 ##                                                                            ##
 ##       ${CENTRAL_LOGIN_SCRIPT}
 ##                                                                            ##
@@ -160,6 +161,11 @@ log_login_banner() {
 ##                                                                            ##
 ################################################################################
 EOF
+}
+
+# Remove ANSI escape sequences (CSI, OSC) and carriage returns from stdin.
+strip_ansi() {
+    sed -E $'s/\x1b\\[[0-9;?]*[ -\\/]*[@-~]//g; s/\x1b\\][^\x07\x1b]*(\x07|\x1b\\\\)//g; s/\x1b[@-Z\\\\-_]//g; s/\r//g'
 }
 
 # Make sure the network policies are set and central is installed in the sandbox.
@@ -196,7 +202,25 @@ ensure_central() {
         log WARN "could not turn off central analytics in ${SANDBOX}"
     fi
 
-    log_login_banner
+    # Login and agent setup run inside the sandbox; the login script generated
+    # above does the same interactively from a terminal.
+    sbx_run "central login && central add ${AGENT}" \
+        || log WARN "central login/add failed in ${SANDBOX}"
+
+    # Without a tty central status prints nothing to the log, so capture its
+    # output into a variable and write it line by line.
+    local status_out status_rc status_line
+    # central emits ANSI colors and terminal queries (OSC/CSI sequences), which
+    # show up as garbage in the log -> disable colors and strip what is left.
+    status_out="$(sbx exec "${SANDBOX}" bash -lc 'export PATH="$HOME/.local/bin:$PATH"; NO_COLOR=1 TERM=dumb central status' < /dev/null 2>&1)"
+    status_rc=$?
+    status_out="$(printf '%s' "${status_out}" | strip_ansi)"
+    while IFS= read -r status_line; do
+        log INFO "central status: ${status_line}"
+    done <<< "${status_out}"
+    if [ "${status_rc}" -ne 0 ]; then
+        log_login_banner
+    fi
 }
 
 SUPPORTED_AGENTS="claude, junie"
