@@ -1,7 +1,7 @@
 #!/bin/bash
 # IMPORTANT: this script must live in the folder that the sandbox should mount.
 # A symbolic link to the script is sufficient.
-# The sandbox name is "<agent>-<name of the current working directory>", with '_' and ' ' replaced by '-'.
+# The sandbox name is "<name of the project folder containing sbx-acp/acp.sh>-<agent>", with '_' and ' ' replaced by '-'.
 
 # Download/update this script from GitHub into ./sbx-acp/ of a project (run by hand, not by the IDE):
 #   cd /path/to/your/project && curl -fsSL https://raw.githubusercontent.com/Gepardec/agent-sandbox/main/acp.sh | bash -s self-install
@@ -64,24 +64,18 @@ if [ "${1:-}" = "init" ]; then
         echo "added /sbx-acp/ to ${PROJECT}/.gitignore (created if missing)"
     fi
     NAME="$(basename "${PROJECT}" | tr "_" " ")-${AGENT_NAME}"
-    # Cheat sheet for all agent variants (sandbox name = <agent>-<project folder>).
-    cat > "${PROJECT}/sbx-acp/readme.adoc" << 'README'
-Bash in Sandbox (AGENT is the agent argument from acp.json: claude or junie)
-[source,shell]
-----
-AGENT="claude"
-SANDBOX="$(basename "$PWD" | tr '_ ' '-')"
-sbx exec -it "${AGENT}-${SANDBOX}" bash
-----
-
-Delete Sandbox (removes the sandbox and everything installed in it, e.g. `central` and its login; the mounted project directory is not affected)
-[source,shell]
-----
-AGENT="claude"
-SANDBOX="$(basename "$PWD" | tr '_ ' '-')"
-sbx rm -f "${AGENT}-${SANDBOX}"
-----
-README
+    # Cheat sheet with hard-coded sandbox names (<project folder>-<agent>) for all agent variants.
+    PROJECT_SLUG="$(basename "${PROJECT}" | tr '_ ' '-')"
+    {
+        for README_AGENT in claude junie; do
+            printf 'Bash in Sandbox (%s)\n[source,shell]\n----\nsbx exec -it "%s-%s" bash\n----\n\n' \
+                "${README_AGENT}" "${PROJECT_SLUG}" "${README_AGENT}"
+        done
+        for README_AGENT in claude junie; do
+            printf 'Delete Sandbox (%s): removes the sandbox and everything installed in it, e.g. `central` and its login; the mounted project directory is not affected\n[source,shell]\n----\nsbx rm -f "%s-%s"\n----\n\n' \
+                "${README_AGENT}" "${PROJECT_SLUG}" "${README_AGENT}"
+        done
+    } > "${PROJECT}/sbx-acp/readme.adoc"
     echo "wrote ${PROJECT}/sbx-acp/readme.adoc"
     # Register the agent in the JetBrains acp.json (JSON with // comments, so no jq):
     # skipped if an entry with this name already exists; file and the sections
@@ -174,7 +168,7 @@ log() {
     printf '%s [%s] [pid %s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "${level}" "$$" "$*" >> "${LOGFILE}"
 }
 
-SANDBOX="${1}-$(basename "$PWD" | tr '_ ' '-')"
+SANDBOX="$(basename "${SCRIPT_DIR}" | tr '_ ' '-')-${1}"
 # Optional second arg "no-central-login": install central, but do not log in.
 CENTRAL_LOGIN=1
 if [ "${2:-}" = "no-central-login" ]; then
