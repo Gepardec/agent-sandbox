@@ -34,7 +34,7 @@ fi
 #   acp.sh init [claude|junie] [project-dir]      (project-dir defaults to $PWD)
 # Links this script into the project as ./sbx-acp/acp.sh, ignores ./sbx-acp/ in ./.gitignore (created
 # if missing, even without a git repo) and
-# adds the entry to ~/.jetbrains/acp.json (skipped if already present). An existing real file ./sbx-acp/acp.sh is never overwritten.
+# writes ./sbx-acp/readme.adoc, adds the entry to ~/.jetbrains/acp.json (skipped if already present). An existing real file ./sbx-acp/acp.sh is never overwritten.
 if [ "${1:-}" = "init" ]; then
     # Resolve symbolic links portably (readlink -f is missing on older macOS).
     REAL="$0"
@@ -64,6 +64,25 @@ if [ "${1:-}" = "init" ]; then
         echo "added /sbx-acp/ to ${PROJECT}/.gitignore (created if missing)"
     fi
     NAME="$(basename "${PROJECT}" | tr "_" " ")-${AGENT_NAME}"
+    # Cheat sheet for all agent variants (sandbox name = <agent>-<project folder>).
+    cat > "${PROJECT}/sbx-acp/readme.adoc" << 'README'
+Bash in Sandbox (AGENT is the agent argument from acp.json: claude or junie)
+[source,shell]
+----
+AGENT="claude"
+SANDBOX="$(basename "$PWD" | tr '_ ' '-')"
+sbx exec -it "${AGENT}-${SANDBOX}" bash
+----
+
+Delete Sandbox (removes the sandbox and everything installed in it, e.g. `central` and its login; the mounted project directory is not affected)
+[source,shell]
+----
+AGENT="claude"
+SANDBOX="$(basename "$PWD" | tr '_ ' '-')"
+sbx rm -f "${AGENT}-${SANDBOX}"
+----
+README
+    echo "wrote ${PROJECT}/sbx-acp/readme.adoc"
     # Register the agent in the JetBrains acp.json (JSON with // comments, so no jq):
     # skipped if an entry with this name already exists; file and the sections
     # default_mcp_settings / agent_servers are created if missing.
