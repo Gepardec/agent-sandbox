@@ -37,8 +37,8 @@ fi
 # Set up a project (run by hand in a terminal, not by the IDE):
 #   acp.sh init [claude|junie] [project-dir]      (project-dir defaults to $PWD)
 # Links this script into the project as ./sbx-acp/acp.sh, ignores ./sbx-acp/ in ./.gitignore (created
-# if missing, even without a git repo) and prints
-# the acp.json entry to add. An existing real file ./sbx-acp/acp.sh is never overwritten.
+# if missing, even without a git repo) and
+# adds the entry to ~/.jetbrains/acp.json (skipped if already present). An existing real file ./sbx-acp/acp.sh is never overwritten.
 if [ "${1:-}" = "init" ]; then
     # Resolve symbolic links portably (readlink -f is missing on older macOS).
     REAL="$0"
@@ -68,9 +68,74 @@ if [ "${1:-}" = "init" ]; then
         echo "added /sbx-acp/ to ${PROJECT}/.gitignore (created if missing)"
     fi
     NAME="$(basename "${PROJECT}" | tr "_" " ")-${AGENT_NAME}"
-    echo
-    echo "Add this to the IDE's acp.json (the entry name decides the sandbox name):"
-    printf '\n"%s": {\n  "command": "%s/sbx-acp/acp.sh",\n  "args": ["%s"]\n}\n' "${NAME}" "${PROJECT}" "${AGENT_NAME}"
+    # Register the agent in the JetBrains acp.json (JSON with // comments, so no jq):
+    # skipped if an entry with this name already exists; file and the sections
+    # default_mcp_settings / agent_servers are created if missing.
+    ACP_JSON="${HOME}/.jetbrains/acp.json"
+    ENTRY_CMD="${PROJECT}/sbx-acp/acp.sh"
+    mkdir -p "$(dirname "${ACP_JSON}")" || exit 1
+    if [ ! -s "${ACP_JSON}" ]; then
+        printf '{\n}\n' > "${ACP_JSON}" || exit 1
+    fi
+    # Add a missing top-level section right after the opening "{" of the file.
+    ensure_section() {
+        local key="$1" block="$2" tmp
+        grep -v '^[[:space:]]*//' "${ACP_JSON}" | grep -q "\"${key}\"" && return 0
+        tmp="$(mktemp "${ACP_JSON}.XXXXXX")" || return 1
+        awk -v block="${block}" '
+            { line[NR] = $0 }
+            END {
+                for (i = 1; i <= NR; i++) {
+                    print line[i]
+                    if (!done && line[i] ~ /^[[:space:]]*\{[[:space:]]*$/) {
+                        done = 1
+                        nxt = ""
+                        for (j = i + 1; j <= NR; j++) {
+                            if (line[j] ~ /^[[:space:]]*$/ || line[j] ~ /^[[:space:]]*\/\//) continue
+                            nxt = line[j]; break
+                        }
+                        print block ((nxt ~ /^[[:space:]]*\}/) ? "" : ",")
+                    }
+                }
+                if (!done) exit 1
+            }' "${ACP_JSON}" > "${tmp}" || { rm -f "${tmp}"; return 1; }
+        mv -f "${tmp}" "${ACP_JSON}" || return 1
+        echo "added \"${key}\" section to ${ACP_JSON}"
+    }
+    ensure_section agent_servers '  "agent_servers": {
+  }' || { echo "could not patch ${ACP_JSON}, fix it by hand" >&2; exit 1; }
+    ensure_section default_mcp_settings '  "default_mcp_settings": {
+    "use_custom_mcp": false,
+    "use_idea_mcp": false
+  }' || { echo "could not patch ${ACP_JSON}, fix it by hand" >&2; exit 1; }
+    if grep -v '^[[:space:]]*//' "${ACP_JSON}" | grep -qF "\"${NAME}\""; then
+        echo "${ACP_JSON} already has \"${NAME}\", skipped"
+    else
+        TMP_JSON="$(mktemp "${ACP_JSON}.XXXXXX")" || exit 1
+        # Insert the entry right after the line opening agent_servers; add a comma
+        # unless the next real line closes the object.
+        awk -v name="${NAME}" -v cmd="${ENTRY_CMD}" -v agent="${AGENT_NAME}" '
+            { line[NR] = $0 }
+            END {
+                done = 0
+                for (i = 1; i <= NR; i++) {
+                    print line[i]
+                    if (!done && line[i] ~ /"agent_servers"/ && line[i] ~ /\{[[:space:]]*$/) {
+                        done = 1
+                        nxt = ""
+                        for (j = i + 1; j <= NR; j++) {
+                            if (line[j] ~ /^[[:space:]]*$/ || line[j] ~ /^[[:space:]]*\/\//) continue
+                            nxt = line[j]; break
+                        }
+                        sep = (nxt ~ /^[[:space:]]*\}/) ? "" : ","
+                        printf "    \"%s\": {\n      \"command\": \"%s\",\n      \"args\": [\"%s\"]\n    }%s\n", name, cmd, agent, sep
+                    }
+                }
+                if (!done) exit 1
+            }' "${ACP_JSON}" > "${TMP_JSON}" || { rm -f "${TMP_JSON}"; echo "could not patch ${ACP_JSON}, add \"${NAME}\" by hand" >&2; exit 1; }
+        mv -f "${TMP_JSON}" "${ACP_JSON}" || exit 1
+        echo "added \"${NAME}\" to ${ACP_JSON}"
+    fi
     exit 0
 fi
 
