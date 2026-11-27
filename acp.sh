@@ -67,7 +67,7 @@ if [ "${1:-}" = "init" ]; then
         printf '/sbx-acp/\n' >> "${PROJECT}/.gitignore"
         echo "added /sbx-acp/ to ${PROJECT}/.gitignore (created if missing)"
     fi
-    NAME="$(basename "${PROJECT}" | tr '_' ' ')"
+    NAME="$(basename "${PROJECT}" | tr "_" " ")-${AGENT_NAME}"
     echo
     echo "Add this to the IDE's acp.json (the entry name decides the sandbox name):"
     printf '\n"%s": {\n  "command": "%s/sbx-acp/acp.sh",\n  "args": ["%s"]\n}\n' "${NAME}" "${PROJECT}" "${AGENT_NAME}"
