@@ -36,7 +36,7 @@ fi
 
 # Set up a project (run by hand in a terminal, not by the IDE):
 #   acp.sh init [claude|junie] [project-dir]      (project-dir defaults to $PWD)
-# Links this script into the project as ./acp.sh, ignores ./acp/ in ./.gitignore (created
+# Links this script into the project as ./acp.sh, ignores ./sbx-acp/ in ./.gitignore (created
 # if missing, even without a git repo) and prints
 # the acp.json entry to add. An existing real file ./acp.sh is never overwritten.
 if [ "${1:-}" = "init" ]; then
@@ -61,9 +61,9 @@ if [ "${1:-}" = "init" ]; then
         ln -sfn "${REAL}" "${PROJECT}/acp.sh" || exit 1
     fi
     echo "linked ${PROJECT}/acp.sh -> ${REAL}"
-    if ! grep -qxE '/?acp/?' "${PROJECT}/.gitignore" 2> /dev/null; then
-        printf '/acp/\n' >> "${PROJECT}/.gitignore"
-        echo "added /acp/ to ${PROJECT}/.gitignore (created if missing)"
+    if ! grep -qxE '/?sbx-acp/?' "${PROJECT}/.gitignore" 2> /dev/null; then
+        printf '/sbx-acp/\n' >> "${PROJECT}/.gitignore"
+        echo "added /sbx-acp/ to ${PROJECT}/.gitignore (created if missing)"
     fi
     NAME="$(basename "${PROJECT}" | tr '_' ' ')"
     echo
@@ -75,8 +75,8 @@ fi
 # Script directory = directory of $0 (without the script name). When called via a
 # symbolic link, $0 is the link path, so everything ends up next to the link.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# All files acp.sh produces (logs, generated login scripts) live in ./acp.
-ACP_DIR="${SCRIPT_DIR}/acp"
+# All files acp.sh produces (logs, generated login scripts) live in ./sbx-acp.
+ACP_DIR="${SCRIPT_DIR}/sbx-acp"
 LOGDIR="${ACP_DIR}/logs"
 mkdir -p "${LOGDIR}"
 LOGFILE="${LOGDIR}/acp.log"
@@ -157,7 +157,7 @@ log INFO "openspec kit: ${OPENSPEC_KIT}"
 log INFO "central kit: ${CENTRAL_KIT}"
 
 # Keep Claude's session transcripts and memory (~/.claude/projects) outside the
-# sandbox: ./acp/claude-projects is part of the mounted workspace, so it survives
+# sandbox: ./sbx-acp/claude-projects is part of the mounted workspace, so it survives
 # `sbx rm`. ~/.claude/projects in the sandbox becomes a symlink to it. An existing
 # directory is copied over first. Only projects/ is moved; auth and kit config stay.
 persist_claude_state() {
