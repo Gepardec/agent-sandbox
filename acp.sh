@@ -36,9 +36,9 @@ fi
 
 # Set up a project (run by hand in a terminal, not by the IDE):
 #   acp.sh init [claude|junie] [project-dir]      (project-dir defaults to $PWD)
-# Links this script into the project as ./acp.sh, ignores ./sbx-acp/ in ./.gitignore (created
+# Links this script into the project as ./sbx-acp/acp.sh, ignores ./sbx-acp/ in ./.gitignore (created
 # if missing, even without a git repo) and prints
-# the acp.json entry to add. An existing real file ./acp.sh is never overwritten.
+# the acp.json entry to add. An existing real file ./sbx-acp/acp.sh is never overwritten.
 if [ "${1:-}" = "init" ]; then
     # Resolve symbolic links portably (readlink -f is missing on older macOS).
     REAL="$0"
@@ -53,14 +53,16 @@ if [ "${1:-}" = "init" ]; then
     AGENT_NAME="${2:-claude}"
     case "${AGENT_NAME}" in claude | junie) ;; *) echo "unsupported agent '${AGENT_NAME}' (claude, junie)" >&2; exit 1 ;; esac
     PROJECT="$(cd "${3:-$PWD}" && pwd)" || exit 1
-    if [ -e "${PROJECT}/acp.sh" ] && [ ! -L "${PROJECT}/acp.sh" ]; then
-        echo "${PROJECT}/acp.sh is a regular file, not touching it" >&2
+    mkdir -p "${PROJECT}/sbx-acp" || exit 1
+    LINK="${PROJECT}/sbx-acp/acp.sh"
+    if [ -e "${LINK}" ] && [ ! -L "${LINK}" ]; then
+        echo "${LINK} is a regular file, not touching it" >&2
         exit 1
     fi
-    if [ "${PROJECT}/acp.sh" != "${REAL}" ]; then
-        ln -sfn "${REAL}" "${PROJECT}/acp.sh" || exit 1
+    if [ "${LINK}" != "${REAL}" ]; then
+        ln -sfn "${REAL}" "${LINK}" || exit 1
     fi
-    echo "linked ${PROJECT}/acp.sh -> ${REAL}"
+    echo "linked ${LINK} -> ${REAL}"
     if ! grep -qxE '/?sbx-acp/?' "${PROJECT}/.gitignore" 2> /dev/null; then
         printf '/sbx-acp/\n' >> "${PROJECT}/.gitignore"
         echo "added /sbx-acp/ to ${PROJECT}/.gitignore (created if missing)"
@@ -68,13 +70,17 @@ if [ "${1:-}" = "init" ]; then
     NAME="$(basename "${PROJECT}" | tr '_' ' ')"
     echo
     echo "Add this to the IDE's acp.json (the entry name decides the sandbox name):"
-    printf '\n"%s": {\n  "command": "%s/acp.sh",\n  "args": ["%s"]\n}\n' "${NAME}" "${PROJECT}" "${AGENT_NAME}"
+    printf '\n"%s": {\n  "command": "%s/sbx-acp/acp.sh",\n  "args": ["%s"]\n}\n' "${NAME}" "${PROJECT}" "${AGENT_NAME}"
     exit 0
 fi
 
 # Script directory = directory of $0 (without the script name). When called via a
 # symbolic link, $0 is the link path, so everything ends up next to the link.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Called via ./sbx-acp/acp.sh: the project root is the parent folder.
+if [ "$(basename "${SCRIPT_DIR}")" = "sbx-acp" ]; then
+    SCRIPT_DIR="$(dirname "${SCRIPT_DIR}")"
+fi
 # All files acp.sh produces (logs, generated login scripts) live in ./sbx-acp.
 ACP_DIR="${SCRIPT_DIR}/sbx-acp"
 LOGDIR="${ACP_DIR}/logs"
