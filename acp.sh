@@ -3,34 +3,30 @@
 # A symbolic link to the script is sufficient.
 # The sandbox name is "<agent>-<name of the current working directory>", with '_' and ' ' replaced by '-'.
 
-# Install/update this script from GitHub into ~/.local/bin (run by hand, not by the IDE):
-#   curl -fsSL https://raw.githubusercontent.com/Gepardec/agent-sandbox/main/acp.sh | bash -s self-install
-#   acp.sh self-install                       (update, once installed)
-# Always downloads (when piped there is no file to copy). Overrides (environment):
-#   ACP_INSTALL_DIR  target directory (default: ~/.local/bin)
-#   ACP_REF          branch, tag or commit to fetch (default: main)
+# Download/update this script from GitHub into ./sbx-acp/ of a project (run by hand, not by the IDE):
+#   cd /path/to/your/project && curl -fsSL https://raw.githubusercontent.com/Gepardec/agent-sandbox/main/acp.sh | bash -s self-install
+#   ./sbx-acp/acp.sh self-install [project-dir]     (update, once downloaded)
+# project-dir defaults to $PWD. Always downloads (when piped there is no file to copy).
+# Override (environment): ACP_REF  branch, tag or commit to fetch (default: main)
 if [ "${1:-}" = "self-install" ]; then
     set -eu
-    DEST_DIR="${ACP_INSTALL_DIR:-$HOME/.local/bin}"
+    PROJECT="$(cd "${2:-$PWD}" && pwd)"
+    DEST_DIR="${PROJECT}/sbx-acp"
     URL="https://raw.githubusercontent.com/Gepardec/agent-sandbox/${ACP_REF:-main}/acp.sh"
     mkdir -p "${DEST_DIR}"
     TMP="$(mktemp "${DEST_DIR}/.acp.sh.XXXXXX")"
     trap 'rm -f "${TMP}"' EXIT
     echo "Downloading ${URL}"
     curl -fsSL "${URL}" -o "${TMP}" < /dev/null
-    # Sanity check before replacing a working install: a bash script that parses.
+    # Sanity check before replacing a working copy: a bash script that parses.
     head -n 1 "${TMP}" | grep -q '^#!/bin/bash' || { echo "Download is not acp.sh, aborting" >&2; exit 1; }
     bash -n "${TMP}" || { echo "Downloaded acp.sh has syntax errors, aborting" >&2; exit 1; }
     chmod 755 "${TMP}"
     mv -f "${TMP}" "${DEST_DIR}/acp.sh"
     trap - EXIT
     echo "Installed ${DEST_DIR}/acp.sh"
-    case ":${PATH}:" in
-        *":${DEST_DIR}:"*) ;;
-        *) echo "Note: ${DEST_DIR} is not on your PATH, use the full path or add it to PATH." ;;
-    esac
     echo
-    echo "Next: cd /path/to/your/project && ${DEST_DIR}/acp.sh init claude"
+    echo "Next: ${DEST_DIR}/acp.sh init claude"
     exit 0
 fi
 
@@ -55,7 +51,7 @@ if [ "${1:-}" = "init" ]; then
     PROJECT="$(cd "${3:-$PWD}" && pwd)" || exit 1
     mkdir -p "${PROJECT}/sbx-acp" || exit 1
     LINK="${PROJECT}/sbx-acp/acp.sh"
-    if [ -e "${LINK}" ] && [ ! -L "${LINK}" ]; then
+    if [ "${LINK}" != "${REAL}" ] && [ -e "${LINK}" ] && [ ! -L "${LINK}" ]; then
         echo "${LINK} is a regular file, not touching it" >&2
         exit 1
     fi
